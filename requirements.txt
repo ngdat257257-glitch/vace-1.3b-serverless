@@ -12,6 +12,16 @@ safetensors>=0.4.3
 einops>=0.7.0
 sentencepiece>=0.2.0
 
+# VACE Framework Dependencies
+easydict>=1.10
+ftfy>=6.1.1
+dashscope>=1.14.0
+scikit-image>=0.21.0
+scikit-learn>=1.3.0
+pycocotools>=2.0.7
+timm>=0.9.12
+onnxruntime-gpu>=1.17.0
+
 # Video & Image Processing
 decord>=0.6.0
 imageio[ffmpeg]>=2.34.0

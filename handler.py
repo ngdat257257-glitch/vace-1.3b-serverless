@@ -16,10 +16,26 @@ if VACE_ROOT not in sys.path and os.path.exists(VACE_ROOT):
     sys.path.append(VACE_ROOT)
 
 MODEL_DIR = os.getenv("MODEL_DIR", "/models/Wan2.1-VACE-1.3B")
-if not os.path.exists(MODEL_DIR):
-    # Fallback to local /workspace/models nếu dùng Network Volume
-    if os.path.exists("/workspace/models/Wan2.1-VACE-1.3B"):
-        MODEL_DIR = "/workspace/models/Wan2.1-VACE-1.3B"
+
+def ensure_model_weights():
+    global MODEL_DIR
+    target = MODEL_DIR or "/models/Wan2.1-VACE-1.3B"
+    # Kiểm tra nếu thư mục model chưa có hoặc trống
+    if not os.path.exists(target) or not any(Path(target).iterdir()):
+        if os.path.exists("/workspace/models/Wan2.1-VACE-1.3B"):
+            MODEL_DIR = "/workspace/models/Wan2.1-VACE-1.3B"
+            return MODEL_DIR
+        print(f">>> [VACE] Đang tự động tải weights model Wan2.1-VACE-1.3B về {target}...")
+        os.makedirs(target, exist_ok=True)
+        from huggingface_hub import snapshot_download
+        try:
+            snapshot_download(repo_id="Wan-AI/Wan2.1-VACE-1.3B", local_dir=target, resume_download=True)
+        except Exception as ex:
+            print(f">>> Thử lại tải từ ali-vilab: {ex}")
+            snapshot_download(repo_id="ali-vilab/Wan2.1-VACE-1.3B", local_dir=target, resume_download=True)
+        print(">>> [VACE] Tải weights model thành công!")
+    MODEL_DIR = target
+    return MODEL_DIR
 
 print(f"=== [VACE 1.3B WORKER] Khởi động ===")
 print(f"VACE Root: {VACE_ROOT}")
@@ -94,7 +110,16 @@ def handler(job):
         if video_data and input_video_path:
             save_input_asset(video_data, input_video_path)
 
-        print(f"[{job_id}] Đang thực hiện inference VACE 1.3B (Task: {task})...")
+        # Đảm bảo model checkpoint đã sẵn sàng
+        ckpt_dir = ensure_model_weights()
+
+        # Ánh xạ task hợp lệ cho vace_pipeline.py
+        # Các task được hỗ trợ: depth, depthv2, pose, inpainting, frameref
+        valid_tasks = ["depth", "depthv2", "pose", "pose_body", "inpainting", "frameref"]
+        if task not in valid_tasks:
+            task = "depth" if input_video_path else "frameref"
+
+        print(f"[{job_id}] Đang thực hiện inference VACE 1.3B (Task: {task}, Ckpt: {ckpt_dir})...")
 
         # Chuẩn bị lệnh gọi pipeline VACE
         pipeline_script = os.path.join(VACE_ROOT, "vace", "vace_pipeline.py")
@@ -110,11 +135,9 @@ def handler(job):
             "--prompt", prompt,
             "--output_dir", temp_dir,
             "--num_frames", str(num_frames),
-            "--fps", str(fps)
+            "--fps", str(fps),
+            "--ckpt_dir", ckpt_dir
         ]
-
-        if os.path.exists(MODEL_DIR):
-            cmd.extend(["--ckpt_dir", MODEL_DIR])
 
         # Gán tham số ảnh và video
         if input_video_path and os.path.exists(input_video_path):
