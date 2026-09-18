@@ -15,9 +15,49 @@ VACE_ROOT = os.getenv("VACE_ROOT", "/workspace/VACE")
 WAN_ROOT = os.getenv("WAN_ROOT", "/workspace/Wan2.1")
 MODEL_DIR = os.getenv("MODEL_DIR", "/models/Wan2.1-VACE-1.3B")
 
+def setup_torch_xpu_compat():
+    """Tạo mock torch.xpu để tương thích diffusers với PyTorch 2.2 (tránh AttributeError: module 'torch' has no attribute 'xpu')"""
+    sitecustomize_path = "/workspace/sitecustomize.py"
+    hook_code = """import sys, types
+try:
+    import torch
+    if not hasattr(torch, "xpu"):
+        torch.xpu = types.SimpleNamespace(
+            empty_cache=lambda: None,
+            is_available=lambda: False,
+            device_count=lambda: 0,
+            current_device=lambda: 0,
+            synchronize=lambda *args, **kwargs: None,
+        )
+except Exception:
+    pass
+"""
+    try:
+        with open(sitecustomize_path, "w") as f:
+            f.write(hook_code)
+        print(">>> [VACE] Đã tạo /workspace/sitecustomize.py để patch torch.xpu")
+    except Exception as e:
+        print(f">>> [VACE WARNING] Không thể ghi sitecustomize.py: {e}")
+
+    try:
+        import types
+        import torch
+        if not hasattr(torch, "xpu"):
+            torch.xpu = types.SimpleNamespace(
+                empty_cache=lambda: None,
+                is_available=lambda: False,
+                device_count=lambda: 0,
+                current_device=lambda: 0,
+                synchronize=lambda *args, **kwargs: None,
+            )
+            print(">>> [VACE] Đã patch torch.xpu trực tiếp trong tiến trình hiện tại")
+    except Exception:
+        pass
+
 def ensure_wan_package():
     """Đảm bảo thư viện wan của Wan2.1 sẵn sàng trong môi trường Python"""
     global WAN_ROOT
+    setup_torch_xpu_compat()
     if not os.path.exists(WAN_ROOT) or not os.path.exists(os.path.join(WAN_ROOT, "wan")):
         print(f">>> [VACE] Đang clone Wan2.1 về {WAN_ROOT}...")
         try:
@@ -32,14 +72,13 @@ def ensure_wan_package():
             print(f">>> [VACE WARNING] Lỗi khi clone Wan2.1: {e}")
 
     # Cập nhật sys.path
-    if WAN_ROOT not in sys.path and os.path.exists(WAN_ROOT):
-        sys.path.insert(0, WAN_ROOT)
-    if VACE_ROOT not in sys.path and os.path.exists(VACE_ROOT):
-        sys.path.insert(0, VACE_ROOT)
+    for p in ["/workspace", WAN_ROOT, VACE_ROOT]:
+        if p not in sys.path and os.path.exists(p):
+            sys.path.insert(0, p)
 
     # Cập nhật biến môi trường PYTHONPATH
     current_pp = os.environ.get("PYTHONPATH", "")
-    os.environ["PYTHONPATH"] = f"{VACE_ROOT}:{WAN_ROOT}:{current_pp}"
+    os.environ["PYTHONPATH"] = f"/workspace:{VACE_ROOT}:{WAN_ROOT}:{current_pp}"
 
 def ensure_model_weights():
     """Đảm bảo weights Wan2.1-VACE-1.3B tồn tại"""
@@ -214,8 +253,9 @@ def handler(job):
             ])
 
         print(f"[{job_id}] Thực thi lệnh: {' '.join(cmd)}")
+        setup_torch_xpu_compat()
         sub_env = os.environ.copy()
-        sub_env["PYTHONPATH"] = f"{VACE_ROOT}:{WAN_ROOT}:{sub_env.get('PYTHONPATH', '')}"
+        sub_env["PYTHONPATH"] = f"/workspace:{VACE_ROOT}:{WAN_ROOT}:{sub_env.get('PYTHONPATH', '')}"
 
         process = subprocess.run(
             cmd,
