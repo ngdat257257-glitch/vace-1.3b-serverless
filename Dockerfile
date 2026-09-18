@@ -27,7 +27,11 @@ RUN pip install --upgrade pip && \
 RUN git clone https://github.com/ali-vilab/VACE.git /workspace/VACE && \
     cd /workspace/VACE && \
     pip install --no-cache-dir -e . 2>/dev/null || true && \
-    pip install --no-cache-dir git+https://github.com/Wan-Video/Wan2.1.git 2>/dev/null || true
+    git clone --depth 1 https://github.com/Wan-Video/Wan2.1.git /workspace/Wan2.1 && \
+    cd /workspace/Wan2.1 && \
+    pip install --no-deps -e . 2>/dev/null || true
+
+ENV PYTHONPATH="/workspace/VACE:/workspace/Wan2.1:${PYTHONPATH}"
 
 # 4. Tải trước weights model Wan2.1-VACE-1.3B (~3.5GB) để khởi động worker tức thì
 RUN python3 -c "from huggingface_hub import snapshot_download; snapshot_download(repo_id='Wan-AI/Wan2.1-VACE-1.3B', local_dir='/models/Wan2.1-VACE-1.3B', resume_download=True)" || \
