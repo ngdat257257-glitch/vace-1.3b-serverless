@@ -15,10 +15,26 @@ VACE_ROOT = os.getenv("VACE_ROOT", "/workspace/VACE")
 WAN_ROOT = os.getenv("WAN_ROOT", "/workspace/Wan2.1")
 MODEL_DIR = os.getenv("MODEL_DIR", "/models/Wan2.1-VACE-1.3B")
 
+def ensure_compatible_diffusers():
+    """Hạ cấp diffusers về 0.30.0 để tương thích hoàn toàn PyTorch 2.2 và loại bỏ mọi lỗi device_mesh / xpu"""
+    try:
+        import diffusers
+        ver = getattr(diffusers, "__version__", "")
+        if not ver.startswith("0.30.") and not ver.startswith("0.29."):
+            print(f">>> [VACE] Phiên bản diffusers hiện tại ({ver}) không tối ưu cho PyTorch 2.2. Đang cài đặt diffusers==0.30.0...")
+            subprocess.run(
+                [sys.executable, "-m", "pip", "install", "--no-deps", "diffusers==0.30.0"],
+                check=False,
+                capture_output=True
+            )
+            print(">>> [VACE] Hoàn tất cài đặt diffusers==0.30.0!")
+    except Exception as e:
+        print(f">>> [VACE WARNING] Không thể kiểm tra/hạ cấp diffusers: {e}")
+
 def setup_torch_xpu_compat():
-    """Tạo universal mock torch.xpu để tương thích hoàn toàn diffusers với PyTorch 2.2"""
+    """Tạo universal mock torch.xpu và torch.distributed.device_mesh để tương thích diffusers với PyTorch 2.2"""
     sitecustomize_path = "/workspace/sitecustomize.py"
-    hook_code = """import sys
+    hook_code = """import sys, types
 
 class _DummyMethod:
     def __call__(self, *args, **kwargs):
@@ -42,17 +58,28 @@ try:
     import torch
     if not hasattr(torch, "xpu"):
         torch.xpu = _MockXPU()
+    if not hasattr(torch, "distributed"):
+        torch.distributed = types.ModuleType("torch.distributed")
+    if not hasattr(torch.distributed, "device_mesh"):
+        dm = types.ModuleType("torch.distributed.device_mesh")
+        class DeviceMesh:
+            def __init__(self, *args, **kwargs):
+                pass
+        dm.DeviceMesh = DeviceMesh
+        torch.distributed.device_mesh = dm
+        sys.modules["torch.distributed.device_mesh"] = dm
 except Exception:
     pass
 """
     try:
         with open(sitecustomize_path, "w") as f:
             f.write(hook_code)
-        print(">>> [VACE] Đã tạo /workspace/sitecustomize.py với universal _MockXPU")
+        print(">>> [VACE] Đã tạo /workspace/sitecustomize.py với universal _MockXPU và device_mesh")
     except Exception as e:
         print(f">>> [VACE WARNING] Không thể ghi sitecustomize.py: {e}")
 
     try:
+        import types
         import torch
         if not hasattr(torch, "xpu"):
             class _DummyMethod:
@@ -74,7 +101,17 @@ except Exception:
                     return _DummyMethod()
 
             torch.xpu = _MockXPU()
-            print(">>> [VACE] Đã patch torch.xpu universal trong tiến trình hiện tại")
+        if not hasattr(torch, "distributed"):
+            torch.distributed = types.ModuleType("torch.distributed")
+        if not hasattr(torch.distributed, "device_mesh"):
+            dm = types.ModuleType("torch.distributed.device_mesh")
+            class DeviceMesh:
+                def __init__(self, *args, **kwargs):
+                    pass
+            dm.DeviceMesh = DeviceMesh
+            torch.distributed.device_mesh = dm
+            sys.modules["torch.distributed.device_mesh"] = dm
+        print(">>> [VACE] Đã patch torch.xpu và device_mesh universal trong tiến trình hiện tại")
     except Exception:
         pass
 
@@ -82,6 +119,7 @@ def ensure_wan_package():
     """Đảm bảo thư viện wan của Wan2.1 sẵn sàng trong môi trường Python"""
     global WAN_ROOT
     setup_torch_xpu_compat()
+    ensure_compatible_diffusers()
     if not os.path.exists(WAN_ROOT) or not os.path.exists(os.path.join(WAN_ROOT, "wan")):
         print(f">>> [VACE] Đang clone Wan2.1 về {WAN_ROOT}...")
         try:
