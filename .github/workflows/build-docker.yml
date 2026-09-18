@@ -32,7 +32,7 @@ jobs:
       - name: Set Image Name
         run: |
           LOWER_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-          echo "IMAGE_NAME=ghcr.io/${LOWER_OWNER}/vace-1.3b-serverless:latest" >> $GITHUB_ENV
+          echo "IMAGE_BASE=ghcr.io/${LOWER_OWNER}/vace-1.3b-serverless" >> $GITHUB_ENV
 
       - name: Build and Push Docker Image
         uses: docker/build-push-action@v5
@@ -41,6 +41,8 @@ jobs:
           file: ./Dockerfile
           platforms: linux/amd64
           push: true
-          tags: ${{ env.IMAGE_NAME }}
+          tags: |
+            ${{ env.IMAGE_BASE }}:latest
+            ${{ env.IMAGE_BASE }}:v2
           cache-from: type=gha
           cache-to: type=gha,mode=max
