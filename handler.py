@@ -16,41 +16,65 @@ WAN_ROOT = os.getenv("WAN_ROOT", "/workspace/Wan2.1")
 MODEL_DIR = os.getenv("MODEL_DIR", "/models/Wan2.1-VACE-1.3B")
 
 def setup_torch_xpu_compat():
-    """Tạo mock torch.xpu để tương thích diffusers với PyTorch 2.2 (tránh AttributeError: module 'torch' has no attribute 'xpu')"""
+    """Tạo universal mock torch.xpu để tương thích hoàn toàn diffusers với PyTorch 2.2"""
     sitecustomize_path = "/workspace/sitecustomize.py"
-    hook_code = """import sys, types
+    hook_code = """import sys
+
+class _DummyMethod:
+    def __call__(self, *args, **kwargs):
+        return None
+    def __bool__(self):
+        return False
+    def __int__(self):
+        return 0
+    def __getattr__(self, name):
+        return self
+
+class _MockXPU:
+    def __getattr__(self, name):
+        if name == "is_available":
+            return lambda: False
+        if name in ("device_count", "current_device"):
+            return lambda: 0
+        return _DummyMethod()
+
 try:
     import torch
     if not hasattr(torch, "xpu"):
-        torch.xpu = types.SimpleNamespace(
-            empty_cache=lambda: None,
-            is_available=lambda: False,
-            device_count=lambda: 0,
-            current_device=lambda: 0,
-            synchronize=lambda *args, **kwargs: None,
-        )
+        torch.xpu = _MockXPU()
 except Exception:
     pass
 """
     try:
         with open(sitecustomize_path, "w") as f:
             f.write(hook_code)
-        print(">>> [VACE] Đã tạo /workspace/sitecustomize.py để patch torch.xpu")
+        print(">>> [VACE] Đã tạo /workspace/sitecustomize.py với universal _MockXPU")
     except Exception as e:
         print(f">>> [VACE WARNING] Không thể ghi sitecustomize.py: {e}")
 
     try:
-        import types
         import torch
         if not hasattr(torch, "xpu"):
-            torch.xpu = types.SimpleNamespace(
-                empty_cache=lambda: None,
-                is_available=lambda: False,
-                device_count=lambda: 0,
-                current_device=lambda: 0,
-                synchronize=lambda *args, **kwargs: None,
-            )
-            print(">>> [VACE] Đã patch torch.xpu trực tiếp trong tiến trình hiện tại")
+            class _DummyMethod:
+                def __call__(self, *args, **kwargs):
+                    return None
+                def __bool__(self):
+                    return False
+                def __int__(self):
+                    return 0
+                def __getattr__(self, name):
+                    return self
+
+            class _MockXPU:
+                def __getattr__(self, name):
+                    if name == "is_available":
+                        return lambda: False
+                    if name in ("device_count", "current_device"):
+                        return lambda: 0
+                    return _DummyMethod()
+
+            torch.xpu = _MockXPU()
+            print(">>> [VACE] Đã patch torch.xpu universal trong tiến trình hiện tại")
     except Exception:
         pass
 
