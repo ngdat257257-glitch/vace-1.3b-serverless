@@ -1,0 +1,72 @@
+name: Build and Push VACE 1.3B Serverless Image
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Đăng nhập vào GitHub Container Registry (Miễn phí, có sẵn không cần mật khẩu)
+      - name: Log in to GitHub Container Registry (GHCR)
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Đăng nhập vào Docker Hub (Tùy chọn: chỉ chạy nếu bạn thêm Secret DOCKERHUB_TOKEN)
+      - name: Log in to Docker Hub (Optional)
+        if: "${{ secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != '' }}"
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Prepare Image Tags
+        id: meta
+        run: |
+          GHCR_REPO="ghcr.io/${{ github.repository_owner }}/vace-1.3b-serverless"
+          GHCR_REPO=$(echo "$GHCR_REPO" | tr '[:upper:]' '[:lower:]')
+          TAGS="${GHCR_REPO}:latest"
+
+          if [ -n "${{ secrets.DOCKERHUB_USERNAME }}" ]; then
+            TAGS="${TAGS},${{ secrets.DOCKERHUB_USERNAME }}/vace-1.3b-serverless:latest"
+          fi
+
+          echo "tags=${TAGS}" >> $GITHUB_OUTPUT
+          echo "ghcr_tag=${GHCR_REPO}:latest" >> $GITHUB_OUTPUT
+
+      - name: Build and Push Docker Image (Nvidia Linux x86_64)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build Summary
+        run: |
+          echo "=========================================================="
+          echo "🎉 BUILD THÀNH CÔNG!"
+          echo "Tên Docker Image trên RunPod của bạn là:"
+          echo "${{ steps.meta.outputs.ghcr_tag }}"
+          echo "=========================================================="

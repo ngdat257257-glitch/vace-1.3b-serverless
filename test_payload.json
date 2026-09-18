@@ -1,0 +1,10 @@
+{
+  "input": {
+    "character_image": "https://raw.githubusercontent.com/ali-vilab/VACE/main/assets/images/girl.png",
+    "driving_video": "https://raw.githubusercontent.com/ali-vilab/VACE/main/assets/videos/test.mp4",
+    "prompt": "a realistic character dancing smoothly with graceful movements, photorealistic, cinematic lighting, 4k",
+    "task": "swap_anything",
+    "num_frames": 49,
+    "fps": 16
+  }
+}

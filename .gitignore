@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.env
+
+# Mac
+.DS_Store
+
+# Temporary outputs
+*.mp4
+*.png
+*.jpg
+temp_*

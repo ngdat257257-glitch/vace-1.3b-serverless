@@ -1,0 +1,25 @@
+# RunPod Serverless SDK
+runpod>=1.7.0
+
+# Core AI & DL
+torch>=2.2.0
+torchvision>=0.17.0
+torchaudio>=2.2.0
+transformers>=4.40.0
+accelerate>=0.30.0
+diffusers>=0.28.0
+safetensors>=0.4.3
+einops>=0.7.0
+sentencepiece>=0.2.0
+
+# Video & Image Processing
+decord>=0.6.0
+imageio[ffmpeg]>=2.34.0
+imageio>=2.34.0
+pillow>=10.2.0
+opencv-python-headless>=4.9.0.80
+
+# Utilities
+requests>=2.31.0
+tqdm>=4.66.0
+huggingface_hub>=0.23.0
